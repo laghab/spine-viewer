@@ -305,8 +305,13 @@ async function processFileMap(filesMap) {
     if (!atlasPath) continue;
 
     const jsonText = await filesMap[jsonPath].text();
-    const jsonBlobUrl = URL.createObjectURL(new Blob([jsonText], { type: 'application/json' }));
-    clientBlobUrls.push(jsonBlobUrl);
+    const jsonBlobUrlBase = URL.createObjectURL(new Blob([jsonText], { type: 'application/json' }));
+    clientBlobUrls.push(jsonBlobUrlBase);
+    // spine-player picks the JSON vs. binary skeleton parser by checking
+    // config.skeleton.endsWith(".json"), which a bare blob: URL never satisfies.
+    // A URL fragment is always stripped before a blob: URL is resolved, so this
+    // still fetches the exact same blob while making that check pass.
+    const jsonBlobUrl = jsonBlobUrlBase + '#skeleton.json';
 
     const { atlasBlobUrl, rawDataURIs } = atlasInfo[atlasPath];
 
