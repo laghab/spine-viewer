@@ -7,7 +7,7 @@ grid — click one to zoom into a full animated view with bones, slots, skins, a
 Built for quickly sanity-checking exported Spine assets (from an artist, a build pipeline, or your own
 project) without opening the Spine editor or wiring them into a game engine first.
 
-**Live demo:** _link goes here_
+**Live demo:** https://spine-viewer-rho.vercel.app
 
 ## Running it
 
