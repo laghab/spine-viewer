@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spine Viewer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%B4%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#090b10; --bg-elevated:#12151c; --bg-sunken:#05070a; --bg-well:#0d1016;
+  --border:#1e232d; --border-hover:#333d4d;
+  --accent:#5eead4; --accent-soft:#5eead422; --accent2:#a78bfa;
+  --text:#e5e9f0; --text-dim:#8891a0; --text-faint:#4a5261;
+  --ok:#5eead4; --err:#fb7185; --err-bg:#241014; --err-border:#4a2530;
+  --radius-lg:20px; --radius-md:14px; --radius-sm:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:
+    radial-gradient(1200px 600px at 15% -10%, #17203622, transparent),
+    radial-gradient(1000px 500px at 110% 10%, #2a173622, transparent),
+    var(--bg);
+  color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  min-height:100vh;line-height:1.5;padding-bottom:3rem}
+button{font-family:inherit}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::selection{background:var(--accent-soft);color:var(--text)}
+
+/* ---- top bar ---- */
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;
+  padding:1rem 1.75rem;background:rgba(9,11,16,.72);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:.65rem}
+.brand .mark{width:1.9rem;height:1.9rem;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));font-size:1rem;flex-shrink:0}
+.brand h1{font-size:1.05rem;font-weight:600;letter-spacing:-.01em}
+.brand .sub{color:var(--text-faint);font-size:.75rem;margin-top:.05rem}
+.topbar .actions{display:flex;align-items:center;gap:.6rem}
+
+.btn{display:inline-flex;align-items:center;gap:.4rem;background:var(--bg-elevated);color:var(--text);
+  border:1px solid var(--border);border-radius:999px;padding:.5rem 1.05rem;font-size:.83rem;font-weight:500;
+  cursor:pointer;transition:border-color .15s,color .15s,transform .1s,background-color .15s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),#38c9b9);color:#04231e;border-color:transparent;font-weight:600}
+.btn.primary:hover{color:#04231e;filter:brightness(1.08)}
+.btn.ghost{background:transparent}
+
+/* ---- hero / drop zone ---- */
+main{max-width:1400px;margin:0 auto;padding:0 1.75rem}
+.hero{margin:2.25rem 0}
+.drop-zone{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:4rem 2rem;border:1.5px dashed var(--border);border-radius:var(--radius-lg);
+  background:linear-gradient(180deg,var(--bg-elevated),var(--bg-well));
+  transition:border-color .2s,transform .2s,box-shadow .2s;cursor:pointer;overflow:hidden}
+.drop-zone::before{content:"";position:absolute;inset:0;opacity:0;transition:opacity .3s;
+  background:radial-gradient(500px 260px at 50% 0%, var(--accent-soft), transparent)}
+.drop-zone:hover::before{opacity:1}
+.drop-zone:hover{border-color:var(--border-hover)}
+.drop-zone.dragover{border-color:var(--accent);transform:scale(1.008);
+  box-shadow:0 0 0 1px var(--accent-soft),0 20px 60px -20px var(--accent-soft)}
+.drop-zone .icon{font-size:2.25rem;margin-bottom:.85rem;filter:grayscale(.2)}
+.drop-zone p{color:var(--text-dim);font-size:1rem;text-align:center;position:relative}
+.drop-zone p strong{color:var(--text);font-weight:600}
+.drop-zone .actions{margin-top:1.4rem;display:flex;gap:.7rem;flex-wrap:wrap;justify-content:center;position:relative}
+.drop-zone .hint{color:var(--text-faint);font-size:.75rem;margin-top:.9rem;position:relative}
+
+/* ---- content ---- */
+.content{display:none}
+.content.active{display:block}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:0 0 1.5rem;flex-wrap:wrap}
+.toolbar h2{font-size:1rem;font-weight:600;color:var(--text)}
+.toolbar h2 .count{color:var(--text-faint);font-weight:500;margin-left:.4rem}
+
+.dir-group{margin-bottom:2.25rem}
+.dir-group:last-child{margin-bottom:.5rem}
+.dir-header{display:flex;align-items:center;gap:.5rem;padding-bottom:.6rem;margin-bottom:1rem;
+  color:var(--text-dim);font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
+  border-bottom:1px solid var(--border)}
+
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1.15rem}
+
+.empty-state{display:flex;flex-direction:column;align-items:center;padding:3.5rem 1.5rem;color:var(--text-dim);
+  text-align:center;gap:.4rem;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-lg)}
+.empty-state .icon{font-size:2rem;opacity:.6;margin-bottom:.4rem}
+.empty-state .hint{color:var(--text-faint);font-size:.8rem}
+
+/* ---- cards ---- */
+.card{position:relative;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-md);
+  overflow:hidden;cursor:pointer;transition:border-color .2s,transform .18s,box-shadow .18s}
+.card:hover{border-color:var(--border-hover);transform:translateY(-3px);box-shadow:0 14px 32px -14px rgba(0,0,0,.55)}
+.card.card-error{border-color:var(--err-border)}
+.card.zoom-source{visibility:hidden}
+.card .card-body{position:relative;aspect-ratio:1/1;display:flex;justify-content:center;align-items:center;
+  background:radial-gradient(120% 120% at 50% 15%, #171c26, var(--bg-well));overflow:hidden}
+.card .card-body .player-host{width:78%;height:78%;pointer-events:none}
+.card .card-body .player-host.error{display:flex;align-items:center;justify-content:center;color:var(--err);
+  font-size:.75rem;width:100%;text-align:center;padding:0 1rem}
+.card-loader{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:var(--bg-well)}
+.card .card-footer{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+  padding:.65rem .85rem;border-top:1px solid var(--border)}
+.card .card-footer .name{color:var(--text);font-weight:600;font-size:.83rem;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.card.card-error .card-footer .name{color:var(--err)}
+.card .card-footer .anim-select{background:var(--bg-sunken);color:var(--text-dim);border:1px solid var(--border);
+  border-radius:6px;padding:.2rem .4rem;font-size:.72rem;cursor:pointer;flex-shrink:0;max-width:92px}
+.card .card-footer .anim-tag{color:var(--text-faint);font-size:.72rem;flex-shrink:0}
+.card .card-meta{display:flex;gap:.6rem;padding:0 .85rem .65rem;font-size:.68rem;color:var(--text-faint)}
+.card .card-meta b{color:var(--text-dim);font-weight:600}
+
+.spinner{display:inline-block;width:15px;height:15px;border:2px solid var(--accent-soft);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+#status-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(5,7,10,.85);backdrop-filter:blur(10px);
+  border-top:1px solid var(--border);padding:.55rem 1.75rem;font-size:.78rem;color:var(--text-faint);
+  display:flex;justify-content:space-between;align-items:center;gap:1rem;z-index:10}
+#status-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:.5rem}
+#status-bar .status-ok{color:var(--ok)}
+#status-bar .status-err{color:var(--err)}
+
+@media(max-width:700px){.card-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}}
+@media(max-width:480px){.topbar{padding:.85rem 1.1rem}main{padding:0 1.1rem}.drop-zone{padding:2.75rem 1.25rem}
+  #status-bar{padding:.5rem 1.1rem;font-size:.72rem}}
+
+/* ---- zoom-open expanded view ---- */
+.zoom-backdrop{position:fixed;inset:0;z-index:100;background:rgba(3,4,6,0);display:none}
+.zoom-backdrop.visible{display:block}
+.zoom-backdrop.in{background:rgba(3,4,6,.78);transition:background-color .32s ease}
+.zoom-panel{position:fixed;z-index:101;background:var(--bg-elevated);border:1px solid var(--border-hover);
+  border-radius:var(--radius-md);overflow:hidden;box-shadow:0 30px 80px -20px rgba(0,0,0,.6);
+  display:flex;flex-direction:column}
+.zoom-panel.animating{transition:top .32s cubic-bezier(.2,.9,.25,1),left .32s cubic-bezier(.2,.9,.25,1),
+  width .32s cubic-bezier(.2,.9,.25,1),height .32s cubic-bezier(.2,.9,.25,1),border-radius .32s ease}
+.zoom-close{position:absolute;top:.85rem;right:.85rem;width:2.1rem;height:2.1rem;display:flex;align-items:center;
+  justify-content:center;background:rgba(0,0,0,.4);border:none;border-radius:50%;color:var(--text-dim);
+  font-size:1.4rem;cursor:pointer;z-index:5;line-height:1;transition:color .15s,background-color .15s;opacity:0}
+.zoom-close.show{opacity:1;transition:opacity .18s ease .1s}
+.zoom-close:hover{color:var(--accent);background:rgba(0,0,0,.6)}
+.zoom-body{position:relative;flex:0 0 auto;display:flex;justify-content:center;align-items:center;
+  background:radial-gradient(120% 120% at 50% 10%,#171c26,var(--bg-well));min-height:0;
+  transition:height .32s cubic-bezier(.2,.9,.25,1)}
+.zoom-player{width:100%;height:100%}
+.zoom-info{padding:0;opacity:0;transition:opacity .2s ease;overflow-y:auto}
+.zoom-info.show{opacity:1}
+.zoom-info-inner{padding:1.15rem 1.35rem 1.4rem}
+.zoom-title{color:var(--text);font-size:1.05rem;font-weight:700;letter-spacing:-.01em}
+.zoom-dir{color:var(--text-faint);font-size:.8rem;margin-top:.15rem}
+.zoom-anims{margin-top:.9rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.zoom-anims .lbl{color:var(--text-faint);font-size:.78rem}
+.zoom-anims select{background:var(--bg-sunken);color:var(--text);border:1px solid var(--border);
+  border-radius:7px;padding:.3rem .55rem;font-size:.8rem;cursor:pointer}
+.zoom-anims .tag{color:var(--text);font-size:.8rem;font-weight:600}
+.stat-chips{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+.stat-chip{background:var(--bg-sunken);border:1px solid var(--border);border-radius:8px;padding:.4rem .65rem;
+  font-size:.72rem;color:var(--text-dim)}
+.stat-chip b{color:var(--text);font-weight:700}
+.zoom-error{color:var(--err);font-size:.9rem;padding:1rem;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark">&#129497;</div>
+    <div>
+      <h1>Spine Viewer</h1>
+      <div class="sub">drop a folder or .zip to preview skeletons</div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" id="clear-btn" style="display:none">Clear</button>
+  </div>
+</div>
+
+<main>
+  <div class="hero" id="hero">
+    <div class="drop-zone" id="dropzone">
+      <div class="icon">&#10024;</div>
+      <p>Drop a <strong>.zip</strong> or a <strong>folder</strong> here</p>
+      <div class="actions">
+        <button class="btn primary" id="browse-btn">Select .zip</button>
+        <button class="btn" id="folder-btn">Select Folder</button>
+      </div>
+      <div class="hint">Spine 3.x &amp; 4.x &middot; nothing leaves this machine</div>
+      <input type="file" id="file-input" accept=".zip" hidden>
+      <input type="file" id="folder-input" webkitdirectory hidden>
+    </div>
+  </div>
+
+  <div class="content" id="content">
+    <div class="toolbar">
+      <h2 id="skel-count">Skeletons</h2>
+    </div>
+    <div id="card-container"></div>
+  </div>
+</main>
+
+<div id="status-bar"><span id="status-left">Ready</span></div>
+
+<div class="zoom-backdrop" id="zoom-backdrop"></div>
+<div class="zoom-panel" id="zoom-panel" style="display:none">
+  <button class="zoom-close" id="zoom-close">&times;</button>
+  <div class="zoom-body" id="zoom-body">
+    <div class="zoom-player" id="zoom-player-host"></div>
+    <div class="card-loader" id="zoom-loader"><span class="spinner"></span></div>
+  </div>
+  <div class="zoom-info" id="zoom-info">
+    <div class="zoom-info-inner" id="zoom-info-inner"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "@esotericsoftware/spine-player": "https://esm.sh/@esotericsoftware/spine-player@4.2.74/es2022/spine-player.bundle.mjs",
+    "jszip": "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm"
+  }
+}
+</script>
+<script type="module">
+import { SpinePlayer } from '@esotericsoftware/spine-player';
+import JSZip from 'jszip';
+
+const $ = id => document.getElementById(id);
+const dropzone = $('dropzone'), fileInput = $('file-input'), browseBtn = $('browse-btn');
+const content = $('content'), hero = $('hero'), cardContainer = $('card-container'), skelCount = $('skel-count');
+const clearBtn = $('clear-btn'), statusLeft = $('status-left');
+const backdrop = $('zoom-backdrop'), panel = $('zoom-panel'), closeBtn = $('zoom-close');
+const zoomBody = $('zoom-body'), zoomPlayerHost = $('zoom-player-host'), zoomLoader = $('zoom-loader');
+const zoomInfo = $('zoom-info'), zoomInfoInner = $('zoom-info-inner');
+
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let zoomPlayer = null;
+let sourceCard = null;
+let zoomOpen = false;
+
+// Whether a real backend (server.py) is present. Detected once at startup.
+// When true: uploads go through /upload, /upload-file, /api/skeletons, /api/clear
+// (files persist server-side in uploads/, served back as plain /uploads/* URLs).
+// When false (e.g. a static Vercel deploy with no backend): everything is parsed
+// and rendered fully client-side via blob: URLs, nothing ever leaves the browser.
+let hasBackend = false;
+
+// Blob URLs created for client-only mode, tracked for revocation.
+let clientBlobUrls = [];
+function revokeClientBlobUrls() {
+  for (const u of clientBlobUrls) URL.revokeObjectURL(u);
+  clientBlobUrls = [];
+}
+
+function setStatus(msg, type) {
+  statusLeft.innerHTML = type === 'loading' ? `<span class="spinner"></span>${msg}` : msg;
+  statusLeft.className = type === 'error' ? 'status-err' : type === 'ok' ? 'status-ok' : '';
+}
+
+// Normalize a server-listed skeleton ({file,name,dir,atlas,png}) into the same
+// shape client-mode skeletons already have, so rendering code never needs to
+// care which mode produced it.
+function toRenderable(s) {
+  if (s.skeletonUrl) return s; // already normalized (client mode)
+  return {
+    name: s.name, dir: s.dir,
+    skeletonUrl: `/uploads/${s.file}`, atlasUrl: `/uploads/${s.atlas}`,
+    rawDataURIs: {}, skeletonPath: s.file, atlasPath: s.atlas,
+  };
+}
+
+// ---- client-only asset processing (no backend) ----
+// Skeleton JSON and atlas text are wrapped in Blob URLs (fetchable, unlike
+// spine-player's rawDataURIs option, which only accepts real data: URIs).
+// Texture pages are resolved via a rawDataURIs entry keyed exactly as
+// spine-player's AssetManager resolves them at runtime: dirname(atlasUrl) + pageName.
+async function processFileMap(filesMap) {
+  const jsonPaths = Object.keys(filesMap).filter(p => p.endsWith('.json'));
+  const atlasPaths = Object.keys(filesMap).filter(p => p.endsWith('.atlas'));
+
+  const atlasInfo = {};
+  for (const ap of atlasPaths) {
+    const atlasText = await filesMap[ap].text();
+    const atlasBlobUrl = URL.createObjectURL(new Blob([atlasText], { type: 'text/plain' }));
+    clientBlobUrls.push(atlasBlobUrl);
+
+    const rawDataURIs = {};
+    const texFile = atlasText.split('\n')[0].trim();
+    if (texFile) {
+      const dir = ap.includes('/') ? ap.slice(0, ap.lastIndexOf('/') + 1) : '';
+      const texBlob = filesMap[dir + texFile];
+      if (texBlob) {
+        const texUrl = URL.createObjectURL(texBlob);
+        clientBlobUrls.push(texUrl);
+        const parentIdx = atlasBlobUrl.lastIndexOf('/');
+        const parent = parentIdx >= 0 ? atlasBlobUrl.slice(0, parentIdx + 1) : '';
+        rawDataURIs[parent + texFile] = texUrl;
+      }
+    }
+    atlasInfo[ap] = { atlasBlobUrl, rawDataURIs };
+  }
+
+  const skeletons = [];
+  for (const jsonPath of jsonPaths) {
+    const dir = jsonPath.includes('/') ? jsonPath.slice(0, jsonPath.lastIndexOf('/') + 1) : '';
+    const name = jsonPath.replace(/\.json$/, '').split('/').pop();
+    const atlasPath = atlasPaths.find(p => p.startsWith(dir) && p !== jsonPath);
+    if (!atlasPath) continue;
+
+    const jsonText = await filesMap[jsonPath].text();
+    const jsonBlobUrl = URL.createObjectURL(new Blob([jsonText], { type: 'application/json' }));
+    clientBlobUrls.push(jsonBlobUrl);
+
+    const { atlasBlobUrl, rawDataURIs } = atlasInfo[atlasPath];
+
+    skeletons.push({
+      name, dir: dir.replace(/\/$/, '') || '',
+      skeletonPath: jsonPath, atlasPath,
+      skeletonUrl: jsonBlobUrl, atlasUrl: atlasBlobUrl, rawDataURIs,
+    });
+  }
+
+  skeletons.sort((a, b) => a.dir.localeCompare(b.dir) || a.name.localeCompare(b.name));
+  return skeletons;
+}
+
+// ---- shared "zoom open" panel sizing helpers ----
+
+function targetRect() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const w = Math.min(860, vw - 48);
+  const h = Math.min(680, vh - 48);
+  return { top: (vh - h) / 2, left: (vw - w) / 2, width: w, height: h };
+}
+
+function playerHeightFor(w, h) {
+  // Reserve space for the info panel below the square-ish player region.
+  return Math.min(w, h - 150);
+}
+
+async function openZoom(sk, card) {
+  if (zoomOpen) return;
+  zoomOpen = true;
+  sourceCard = card;
+
+  const startRect = card.getBoundingClientRect();
+  card.classList.add('zoom-source');
+
+  panel.style.display = 'flex';
+  panel.classList.remove('animating');
+  backdrop.classList.add('visible');
+  closeBtn.classList.remove('show');
+  zoomInfo.classList.remove('show');
+  zoomInfoInner.innerHTML = '';
+  zoomPlayerHost.innerHTML = '';
+  zoomLoader.style.display = 'flex';
+
+  // 1. Place the panel exactly over the card (FLIP start state).
+  Object.assign(panel.style, {
+    top: `${startRect.top}px`, left: `${startRect.left}px`,
+    width: `${startRect.width}px`, height: `${startRect.height}px`,
+    borderRadius: getComputedStyle(card).borderRadius,
+  });
+  zoomBody.style.height = `${startRect.height}px`;
+
+  const finish = () => {
+    closeBtn.classList.add('show');
+    zoomInfo.classList.add('show');
+    loadZoomPlayer(sk);
+  };
+
+  if (reduceMotion) {
+    const r = targetRect();
+    Object.assign(panel.style, { top: `${r.top}px`, left: `${r.left}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: '14px' });
+    zoomBody.style.height = `${playerHeightFor(r.width, r.height)}px`;
+    backdrop.classList.add('in');
+    finish();
+    return;
+  }
+
+  // 2. Force layout, then animate to the centered large rect.
+  // eslint-disable-next-line no-unused-expressions
+  panel.getBoundingClientRect();
+  requestAnimationFrame(() => {
+    panel.classList.add('animating');
+    backdrop.classList.add('in');
+    const r = targetRect();
+    Object.assign(panel.style, { top: `${r.top}px`, left: `${r.left}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: '14px' });
+    zoomBody.style.height = `${playerHeightFor(r.width, r.height)}px`;
+
+    let done = false;
+    const finishOnce = () => { if (done) return; done = true; finish(); };
+    const onEnd = (e) => {
+      if (e.target !== panel || e.propertyName !== 'width') return;
+      panel.removeEventListener('transitionend', onEnd);
+      finishOnce();
+    };
+    panel.addEventListener('transitionend', onEnd);
+    setTimeout(finishOnce, 500); // safety net if transitionend doesn't fire
+  });
+}
+
+function closeZoom() {
+  if (!zoomOpen) return;
+  const card = sourceCard;
+  closeBtn.classList.remove('show');
+  zoomInfo.classList.remove('show');
+  backdrop.classList.remove('in');
+
+  const cleanup = () => {
+    zoomOpen = false;
+    panel.style.display = 'none';
+    panel.classList.remove('animating');
+    backdrop.classList.remove('visible');
+    if (zoomPlayer) { try { zoomPlayer.dispose(); } catch (e) {} zoomPlayer = null; }
+    zoomPlayerHost.innerHTML = '';
+    if (card) card.classList.remove('zoom-source');
+    sourceCard = null;
+  };
+
+  if (reduceMotion || !card || !card.isConnected) { cleanup(); return; }
+
+  const endRect = card.getBoundingClientRect();
+  panel.classList.add('animating');
+  requestAnimationFrame(() => {
+    Object.assign(panel.style, {
+      top: `${endRect.top}px`, left: `${endRect.left}px`,
+      width: `${endRect.width}px`, height: `${endRect.height}px`,
+      borderRadius: getComputedStyle(card).borderRadius,
+    });
+    zoomBody.style.height = `${endRect.height}px`;
+    const onEnd = (e) => {
+      if (e.target !== panel || e.propertyName !== 'width') return;
+      panel.removeEventListener('transitionend', onEnd);
+      cleanup();
+    };
+    panel.addEventListener('transitionend', onEnd);
+    setTimeout(cleanup, 500); // safety net if transitionend doesn't fire
+  });
+}
+
+async function loadZoomPlayer(sk) {
+  try {
+    const p = new SpinePlayer(zoomPlayerHost, {
+      skeleton: sk.skeletonUrl, atlas: sk.atlasUrl, rawDataURIs: sk.rawDataURIs,
+      animation: sk.curAnim || '', backgroundColor: '0d1016', showControls: false, showLoading: false, alpha: false,
+      viewport: { padLeft: '6%', padRight: '6%', padTop: '6%', padBottom: '6%' },
+    });
+    zoomPlayer = p;
+    await waitForSkeleton(p);
+    zoomLoader.style.display = 'none';
+    const data = p.skeleton.data, anims = data.animations.map(a => a.name);
+    const def = sk.curAnim && anims.includes(sk.curAnim) ? sk.curAnim : (anims[0] || '');
+    if (def) { try { p.setAnimation(def); p.play(); } catch (e) {} }
+
+    const animsEl = document.createElement('div');
+    animsEl.className = 'zoom-anims';
+    if (anims.length > 1) {
+      const sel = document.createElement('select');
+      anims.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; if (a === def) o.selected = true; sel.appendChild(o); });
+      sel.onchange = () => { try { p.setAnimation(sel.value); p.play(); } catch (e) {} };
+      animsEl.innerHTML = '<span class="lbl">Animation</span>';
+      animsEl.appendChild(sel);
+    } else if (anims.length === 1) {
+      animsEl.innerHTML = `<span class="lbl">Animation</span><span class="tag">${anims[0]}</span>`;
+    }
+
+    const ver = data.skeleton?.version || '?', w = Math.round(data.skeleton?.width || 0), h = Math.round(data.skeleton?.height || 0);
+    zoomInfoInner.innerHTML = `
+      <div class="zoom-title">${sk.name}</div>
+      ${sk.dir ? `<div class="zoom-dir">${sk.dir}</div>` : ''}`;
+    zoomInfoInner.appendChild(animsEl);
+    const chips = document.createElement('div');
+    chips.className = 'stat-chips';
+    chips.innerHTML = `
+      <div class="stat-chip">Spine <b>${ver}</b></div>
+      <div class="stat-chip">Bones <b>${data.bones.length}</b></div>
+      <div class="stat-chip">Slots <b>${data.slots.length}</b></div>
+      <div class="stat-chip">Skins <b>${data.skins.length}</b></div>
+      <div class="stat-chip">Bounds <b>${w}&times;${h}${w ? 'px' : ''}</b></div>`;
+    zoomInfoInner.appendChild(chips);
+  } catch (e) {
+    zoomLoader.style.display = 'none';
+    zoomPlayerHost.innerHTML = `<div class="zoom-error">Failed to load<br><span style="color:var(--text-faint);font-size:.78rem">${e.message}</span></div>`;
+    zoomInfoInner.innerHTML = `<div class="zoom-title" style="color:var(--err)">${sk.name}</div>`;
+  }
+}
+
+closeBtn.onclick = closeZoom;
+backdrop.onclick = closeZoom;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeZoom(); });
+window.addEventListener('resize', () => {
+  if (!zoomOpen) return;
+  const r = targetRect();
+  panel.classList.remove('animating');
+  Object.assign(panel.style, { top: `${r.top}px`, left: `${r.left}px`, width: `${r.width}px`, height: `${r.height}px` });
+  zoomBody.style.height = `${playerHeightFor(r.width, r.height)}px`;
+});
+
+function waitForSkeleton(player) {
+  return new Promise((resolve, reject) => {
+    let t = 0;
+    const c = () => {
+      if (player.error) {
+        let m = 'Error';
+        try { if (player.assetManager?.getErrors) { const e = player.assetManager.getErrors(); if (e?.length) m = e.join('; '); } } catch (_) {}
+        reject(new Error(m));
+      } else if (player.skeleton && player.canvas?.width > 0) {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      } else {
+        t++;
+        if (t > 600) reject(new Error('Timeout'));
+        else requestAnimationFrame(c);
+      }
+    };
+    c();
+  });
+}
+
+// ---- rendering ----
+
+async function renderSkeletons(skeletons) {
+  cardContainer.innerHTML = '';
+  content.classList.add('active');
+  hero.style.display = 'none';
+  clearBtn.style.display = 'inline-flex';
+  skelCount.innerHTML = `Skeletons<span class="count">${skeletons.length}</span>`;
+
+  if (!skeletons.length) {
+    cardContainer.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">&#128269;</div>
+        <div>No skeletons found in what was dropped</div>
+        <div class="hint">Each skeleton needs a matching <strong>.json</strong> + <strong>.atlas</strong> + texture, grouped in the same folder</div>
+      </div>`;
+    return;
+  }
+
+  const groups = {};
+  for (const sk of skeletons) { const d = sk.dir || '__root__'; if (!groups[d]) groups[d] = []; groups[d].push(sk); }
+
+  for (const [dir, skels] of Object.entries(groups)) {
+    const grp = document.createElement('div'); grp.className = 'dir-group';
+    const hdr = document.createElement('div'); hdr.className = 'dir-header';
+    hdr.innerHTML = dir === '__root__' ? 'Root' : `&#128193;&nbsp; ${dir}`;
+    grp.appendChild(hdr);
+    const grid = document.createElement('div'); grid.className = 'card-grid';
+    grp.appendChild(grid); cardContainer.appendChild(grp);
+
+    for (const sk of skels) {
+      sk.curAnim = '';
+      const card = document.createElement('div'); card.className = 'card';
+
+      const body = document.createElement('div'); body.className = 'card-body';
+      const host = document.createElement('div'); host.className = 'player-host';
+      body.appendChild(host);
+      const loader = document.createElement('div'); loader.className = 'card-loader';
+      loader.innerHTML = '<span class="spinner"></span>';
+      body.appendChild(loader);
+      card.appendChild(body);
+
+      const footer = document.createElement('div'); footer.className = 'card-footer';
+      footer.innerHTML = `<span class="name">${sk.name}</span>`;
+      card.appendChild(footer);
+
+      const meta = document.createElement('div'); meta.className = 'card-meta';
+      meta.innerHTML = `<span class="label">Loading&hellip;</span>`;
+      card.appendChild(meta);
+
+      grid.appendChild(card);
+      card.addEventListener('click', () => openZoom(sk, card));
+
+      try {
+        const p = new SpinePlayer(host, {
+          skeleton: sk.skeletonUrl, atlas: sk.atlasUrl, rawDataURIs: sk.rawDataURIs,
+          animation: '', backgroundColor: '0d1016', showControls: false, showLoading: false, alpha: false,
+          viewport: { padLeft: '5%', padRight: '5%', padTop: '5%', padBottom: '5%' },
+        });
+        await waitForSkeleton(p);
+        loader.remove();
+
+        const data = p.skeleton.data, anims = data.animations.map(a => a.name), def = anims[0] || '';
+        if (def) { sk.curAnim = def; try { p.setAnimation(def); p.play(); } catch (e) {} }
+
+        if (anims.length > 1) {
+          const sel = document.createElement('select'); sel.className = 'anim-select';
+          anims.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; if (a === def) o.selected = true; sel.appendChild(o); });
+          sel.onchange = () => { sk.curAnim = sel.value; try { p.setAnimation(sel.value); p.play(); } catch (e) {} };
+          sel.onmousedown = e => e.stopPropagation();
+          footer.appendChild(sel);
+        } else if (anims.length === 1) {
+          const tag = document.createElement('span'); tag.className = 'anim-tag'; tag.textContent = anims[0];
+          footer.appendChild(tag);
+        }
+
+        meta.innerHTML = `<span><b>${data.bones.length}</b> bones</span><span><b>${data.slots.length}</b> slots</span>`;
+      } catch (e) {
+        loader.remove();
+        card.classList.add('card-error');
+        host.classList.add('error'); host.textContent = 'Failed to load';
+        meta.innerHTML = `<span style="color:var(--err)">${e.message}</span>`;
+      }
+    }
+  }
+}
+
+// ---- folder reading ----
+function readDirEntry(entry) {
+  return new Promise(resolve => {
+    const files = []; const reader = entry.createReader();
+    function read() {
+      reader.readEntries(async es => {
+        if (es.length === 0) { resolve(files); return; }
+        for (const e of es) {
+          if (e.isFile) { const f = await new Promise(r => e.file(r)); files.push({ path: e.fullPath.replace(/^\//, ''), file: f }); }
+          else if (e.isDirectory) { files.push(...(await readDirEntry(e))); }
+        }
+        read();
+      });
+    }
+    read();
+  });
+}
+
+// files: array of {path, file}. Branches on hasBackend.
+async function ingestFiles(files) {
+  if (hasBackend) {
+    await fetch('/api/clear');
+    setStatus(`Uploading ${files.length} files...`, 'loading');
+    for (const { path, file } of files) {
+      const fd = new FormData(); fd.append('path', path); fd.append('file', file);
+      try { await fetch('/upload-file', { method: 'POST', body: fd }); }
+      catch (e) { console.warn(`Failed ${path}:`, e); }
+    }
+    const r = await fetch('/api/skeletons');
+    const d = await r.json();
+    await renderSkeletons(d.map(toRenderable));
+    setStatus(`Loaded ${d.length} skeleton(s)`, 'ok');
+  } else {
+    setStatus(`Processing ${files.length} files...`, 'loading');
+    revokeClientBlobUrls();
+    const filesMap = {};
+    for (const { path, file } of files) filesMap[path] = file;
+    const skeletons = await processFileMap(filesMap);
+    await renderSkeletons(skeletons);
+    setStatus(`Loaded ${skeletons.length} skeleton(s)`, 'ok');
+  }
+}
+
+async function handleFolderFromInput(fileList) {
+  const files = [];
+  for (const f of fileList) files.push({ path: (f.webkitRelativePath || f.name).replace(/^[^/]*?\//, ''), file: f });
+  if (!files.length) { setStatus('No files', 'error'); return; }
+  await ingestFiles(files);
+}
+
+async function handleFolderDrop(items) {
+  setStatus('Reading folder...', 'loading');
+  const allFiles = [];
+  for (const item of items) {
+    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+    if (entry && entry.isDirectory) { allFiles.push(...(await readDirEntry(entry))); }
+    else if (entry && entry.isFile) { const f = await new Promise(r => entry.file(r)); allFiles.push({ path: entry.fullPath.replace(/^\//, ''), file: f }); }
+    else if (item.getAsFile) { const f = item.getAsFile(); if (f) allFiles.push({ path: f.name, file: f }); }
+  }
+  if (!allFiles.length) { setStatus('No files found', 'error'); return; }
+  await ingestFiles(allFiles);
+}
+
+browseBtn.onclick = () => fileInput.click();
+$('folder-btn').onclick = () => {
+  if (window.showDirectoryPicker) {
+    window.showDirectoryPicker().then(async dir => {
+      setStatus('Reading folder...', 'loading');
+      const allFiles = [];
+      async function walk(h, path) {
+        for await (const [name, entry] of h.entries()) {
+          const p = path ? `${path}/${name}` : name;
+          if (entry.kind === 'file') { allFiles.push({ path: p, file: await entry.getFile() }); }
+          else if (entry.kind === 'directory') { await walk(entry, p); }
+        }
+      }
+      await walk(dir, '');
+      if (!allFiles.length) { setStatus('No files', 'error'); return; }
+      await ingestFiles(allFiles);
+    }).catch(e => { if (e.name !== 'AbortError' && e.name !== 'SecurityError') setStatus('Folder picker error: ' + e.message, 'error'); });
+  } else {
+    $('folder-input').click();
+  }
+};
+
+fileInput.onchange = async () => {
+  if (!fileInput.files.length) return;
+  const file = fileInput.files[0];
+  if (hasBackend) {
+    setStatus('Uploading...', 'loading');
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const r = await fetch('/upload', { method: 'POST', body: fd });
+      const d = await r.json();
+      if (d.status === 'ok') { await renderSkeletons(d.skeletons.map(toRenderable)); setStatus(`Loaded ${d.skeletons.length} skeleton(s)`, 'ok'); }
+      else setStatus('Upload failed', 'error');
+    } catch (e) { setStatus('Upload error: ' + e.message, 'error'); }
+  } else {
+    setStatus('Reading zip...', 'loading');
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const filesMap = {};
+      for (const [path, entry] of Object.entries(zip.files)) {
+        if (entry.dir) continue;
+        filesMap[path] = await entry.async('blob');
+      }
+      if (!Object.keys(filesMap).length) { setStatus('Empty zip', 'error'); return; }
+      revokeClientBlobUrls();
+      const skeletons = await processFileMap(filesMap);
+      await renderSkeletons(skeletons);
+      setStatus(`Loaded ${skeletons.length} skeleton(s) from zip`, 'ok');
+    } catch (e) { setStatus('Zip error: ' + e.message, 'error'); console.error(e); }
+  }
+};
+
+$('folder-input').onchange = function () { if (this.files.length) handleFolderFromInput(this.files); };
+
+dropzone.ondragover = e => { e.preventDefault(); dropzone.classList.add('dragover'); };
+dropzone.ondragleave = () => dropzone.classList.remove('dragover');
+dropzone.ondrop = async e => {
+  e.preventDefault(); dropzone.classList.remove('dragover');
+  const items = e.dataTransfer.items; if (!items || !items.length) return;
+  if (items.length === 1) {
+    const entry = items[0].webkitGetAsEntry ? items[0].webkitGetAsEntry() : null;
+    if ((entry && entry.isFile) || !entry) {
+      const f = items[0].getAsFile();
+      if (f && f.name.endsWith('.zip')) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); return; }
+    }
+  }
+  if (items[0].webkitGetAsEntry) { await handleFolderDrop(items); }
+  else setStatus('Folder drag-drop not supported. Try selecting a folder or use .zip.', 'error');
+};
+
+clearBtn.onclick = async () => {
+  if (hasBackend) await fetch('/api/clear');
+  else revokeClientBlobUrls();
+  cardContainer.innerHTML = ''; content.classList.remove('active');
+  hero.style.display = ''; clearBtn.style.display = 'none';
+  setStatus('Cleared');
+};
+
+(async () => {
+  try {
+    const r = await fetch('/api/skeletons');
+    if (r.ok) {
+      hasBackend = true;
+      const skels = await r.json();
+      if (skels.length) { await renderSkeletons(skels.map(toRenderable)); setStatus(`Loaded ${skels.length} skeleton(s)`, 'ok'); return; }
+      setStatus('Drop a .zip or folder to preview', '');
+      return;
+    }
+  } catch (e) { /* no backend reachable — fall back to client-only mode below */ }
+  hasBackend = false;
+  setStatus('Drop a .zip or folder to preview', '');
+})();
+</script>
+</body>
+</html>
