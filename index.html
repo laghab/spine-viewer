@@ -190,6 +190,7 @@ main{max-width:1400px;margin:0 auto;padding:0 1.75rem}
   <div class="content" id="content">
     <div class="toolbar">
       <h2 id="skel-count">Skeletons</h2>
+      <button class="btn" id="resync-btn" style="display:none">&#8635; Restart All Animations</button>
     </div>
     <div id="card-container"></div>
   </div>
@@ -224,7 +225,7 @@ import JSZip from 'jszip';
 const $ = id => document.getElementById(id);
 const dropzone = $('dropzone'), fileInput = $('file-input'), browseBtn = $('browse-btn');
 const content = $('content'), hero = $('hero'), cardContainer = $('card-container'), skelCount = $('skel-count');
-const clearBtn = $('clear-btn'), statusLeft = $('status-left');
+const clearBtn = $('clear-btn'), statusLeft = $('status-left'), resyncBtn = $('resync-btn');
 const backdrop = $('zoom-backdrop'), panel = $('zoom-panel'), closeBtn = $('zoom-close');
 const zoomBody = $('zoom-body'), zoomPlayerHost = $('zoom-player-host'), zoomLoader = $('zoom-loader');
 const zoomInfo = $('zoom-info'), zoomInfoInner = $('zoom-info-inner');
@@ -234,6 +235,46 @@ const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-mo
 let zoomPlayer = null;
 let sourceCard = null;
 let zoomOpen = false;
+
+// Every card player that loaded successfully, in grid order. Cards are created
+// sequentially with `await`, so each player starts playing the moment its own
+// assets finish loading — leaving the grid permanently out of phase. Restarting
+// them all from time 0 in a single frame is what re-syncs them.
+let cardPlayers = [];
+
+// Rewind every tracked player to the start of its current animation and set
+// them all playing again within one frame.
+//
+// Order matters: pause first (so nothing advances while the rest are being
+// rewound), then rewind, then resume. Doing pause/rewind/resume per player
+// would let the earliest ones tick forward during the later ones' setup, which
+// is exactly the drift being fixed.
+function restartAllAnimations() {
+  const players = cardPlayers.filter(p => p && p.skeleton && !p.error);
+  if (zoomPlayer && zoomPlayer.skeleton && !zoomPlayer.error) players.push(zoomPlayer);
+  if (!players.length) return;
+
+  for (const p of players) { try { p.pause(); } catch (e) {} }
+
+  for (const p of players) {
+    try {
+      // Clearing the track and re-setting the animation is what actually resets
+      // playback time; setAnimation alone on an already-playing track can keep
+      // mixing from the old position.
+      const entry = p.animationState.getCurrent(0);
+      const name = entry?.animation?.name;
+      const loop = entry ? entry.loop : true;
+      p.animationState.clearTracks();
+      p.skeleton.setToSetupPose();
+      if (name) p.animationState.setAnimation(0, name, loop);
+      p.animationState.update(0);
+      p.animationState.apply(p.skeleton);
+      p.skeleton.updateWorldTransform();
+    } catch (e) {}
+  }
+
+  for (const p of players) { try { p.play(); } catch (e) {} }
+}
 
 // Whether a real backend (server.py) is present. Detected once at startup.
 // When true: uploads go through /upload, /upload-file, /api/skeletons, /api/clear
@@ -522,10 +563,15 @@ function waitForSkeleton(player) {
 // ---- rendering ----
 
 async function renderSkeletons(skeletons) {
+  // Old players belong to cards that are about to be discarded.
+  for (const p of cardPlayers) { try { p.dispose(); } catch (e) {} }
+  cardPlayers = [];
+
   cardContainer.innerHTML = '';
   content.classList.add('active');
   hero.style.display = 'none';
   clearBtn.style.display = 'inline-flex';
+  resyncBtn.style.display = skeletons.length ? 'inline-flex' : 'none';
   skelCount.innerHTML = `Skeletons<span class="count">${skeletons.length}</span>`;
 
   if (!skeletons.length) {
@@ -580,6 +626,7 @@ async function renderSkeletons(skeletons) {
         });
         await waitForSkeleton(p);
         loader.remove();
+        cardPlayers.push(p);
 
         const data = p.skeleton.data, anims = data.animations.map(a => a.name), def = anims[0] || '';
         if (def) { sk.curAnim = def; try { p.setAnimation(def); p.play(); } catch (e) {} }
@@ -739,11 +786,26 @@ dropzone.ondrop = async e => {
   else setStatus('Folder drag-drop not supported. Try selecting a folder or use .zip.', 'error');
 };
 
+resyncBtn.onclick = () => {
+  restartAllAnimations();
+  setStatus('Animations restarted in sync', 'ok');
+};
+
+// Debug handle: lets the current playback position of every card be inspected
+// from the console (or an automated check) to confirm they are actually in phase.
+window.__spineTrackTimes = () => cardPlayers.map(p => {
+  const e = p?.animationState?.getCurrent(0);
+  return { anim: e?.animation?.name ?? null, time: e ? e.trackTime : null, paused: !!p?.paused };
+});
+
 clearBtn.onclick = async () => {
   if (hasBackend) await fetch('/api/clear');
   else revokeClientBlobUrls();
+  for (const p of cardPlayers) { try { p.dispose(); } catch (e) {} }
+  cardPlayers = [];
   cardContainer.innerHTML = ''; content.classList.remove('active');
   hero.style.display = ''; clearBtn.style.display = 'none';
+  resyncBtn.style.display = 'none';
   setStatus('Cleared');
 };
 
