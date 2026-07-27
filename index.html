@@ -48,13 +48,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 ::selection{background:var(--accent-soft);color:var(--text)}
 
 /* ---- theme toggle ---- */
-.theme-toggle{display:inline-flex;align-items:center;gap:.15rem;background:var(--bg-elevated);
-  border:1px solid var(--border);border-radius:999px;padding:.2rem}
-.theme-toggle button{display:flex;align-items:center;justify-content:center;width:1.85rem;height:1.85rem;
-  border:none;background:transparent;border-radius:50%;cursor:pointer;color:var(--text-faint);
-  font-size:.9rem;line-height:1;transition:background-color .18s,color .18s}
-.theme-toggle button:hover{color:var(--text)}
-.theme-toggle button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.theme-toggle{display:flex;align-items:center;justify-content:center;width:2.25rem;height:2.25rem;
+  background:var(--bg-elevated);border:1px solid var(--border);border-radius:50%;cursor:pointer;
+  color:var(--text-faint);font-size:1rem;line-height:1;
+  transition:background-color .18s,color .18s,border-color .18s}
+.theme-toggle:hover{color:var(--accent);border-color:var(--accent)}
 
 /* ---- top bar ---- */
 .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;
@@ -267,11 +265,7 @@ main{max-width:1400px;margin:0 auto;padding:0 1.75rem}
     </div>
   </div>
   <div class="actions">
-    <div class="theme-toggle" id="theme-toggle" role="group" aria-label="Color theme">
-      <button data-theme-choice="light" title="Light" aria-pressed="false">&#9728;</button>
-      <button data-theme-choice="system" title="Match system" aria-pressed="true">&#9881;</button>
-      <button data-theme-choice="dark" title="Dark" aria-pressed="false">&#9790;</button>
-    </div>
+    <button class="theme-toggle" id="theme-toggle" type="button"></button>
     <button class="btn ghost" id="clear-btn" style="display:none">Clear</button>
   </div>
 </div>
@@ -350,34 +344,29 @@ const zoomInfo = $('zoom-info'), zoomInfoInner = $('zoom-info-inner');
 const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---- theme ----
-// 'system' follows the OS; 'light'/'dark' pin it. Stored so the choice sticks.
-// SpinePlayer bakes its clear color into WebGL at construction time, so the
-// canvases can't be re-tinted by CSS — the current stage color is read back out
-// of the stylesheet whenever a player is built, and switching theme rebuilds them.
+// Two modes: light and dark. First visit follows the OS, after that the stored
+// choice wins. SpinePlayer bakes its clear color into WebGL at construction
+// time, so the canvases can't be re-tinted by CSS — the current stage color is
+// read back out of the stylesheet whenever a player is built, and switching
+// theme rebuilds them.
 const themeMq = window.matchMedia('(prefers-color-scheme: dark)');
-let themePref = localStorage.getItem('spine-viewer-theme') || 'system';
+let theme = localStorage.getItem('spine-viewer-theme') || (themeMq.matches ? 'dark' : 'light');
+const themeBtn = document.getElementById('theme-toggle');
 
-function effectiveTheme() {
-  return themePref === 'system' ? (themeMq.matches ? 'dark' : 'light') : themePref;
-}
 function applyTheme() {
-  document.documentElement.setAttribute('data-theme', effectiveTheme());
-  for (const b of document.querySelectorAll('#theme-toggle button')) {
-    b.setAttribute('aria-pressed', String(b.dataset.themeChoice === themePref));
-  }
-}
-function setTheme(pref) {
-  themePref = pref;
-  localStorage.setItem('spine-viewer-theme', pref);
-  applyTheme();
-  restyleAllPlayers();
+  document.documentElement.setAttribute('data-theme', theme);
+  const dark = theme === 'dark';
+  themeBtn.innerHTML = dark ? '&#9790;' : '&#9728;';
+  themeBtn.title = dark ? 'Dark mode — click for light' : 'Light mode — click for dark';
+  themeBtn.setAttribute('aria-label', themeBtn.title);
 }
 applyTheme();
-document.getElementById('theme-toggle').addEventListener('click', e => {
-  const b = e.target.closest('button[data-theme-choice]');
-  if (b) setTheme(b.dataset.themeChoice);
+themeBtn.addEventListener('click', () => {
+  theme = theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('spine-viewer-theme', theme);
+  applyTheme();
+  restyleAllPlayers();
 });
-themeMq.addEventListener('change', () => { if (themePref === 'system') { applyTheme(); restyleAllPlayers(); } });
 
 let zoomPlayer = null;
 let sourceCard = null;
