@@ -268,6 +268,19 @@ main{max-width:1400px;margin:0 auto;padding:0 1.75rem}
 .toolbar-toggle{display:inline-flex}
 .toolbar-toggle .switch{background:var(--bg-elevated);border:1px solid var(--border);border-radius:999px;
   padding:.5rem 1rem .5rem .85rem}
+
+/* ---- replay button (shown only while loop is off) ---- */
+.replay-btn{display:none;align-items:center;justify-content:center;background:var(--bg-sunken);
+  color:var(--text-dim);border:1px solid var(--border);border-radius:6px;width:1.5rem;height:1.5rem;
+  padding:0;font-size:.85rem;line-height:1;cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s}
+.replay-btn:hover{color:var(--accent);border-color:var(--accent)}
+body.loop-off .replay-btn{display:inline-flex}
+
+/* ---- debug toggles rendered inside the zoom (maximized) view ---- */
+.zoom-debug{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+.zoom-debug .lbl{color:var(--text-faint);font-size:.78rem;margin-bottom:.6rem;display:block}
+.zoom-debug-toggles{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .75rem}
+.zoom-debug-toggles .switch{font-size:.75rem}
 </style>
 </head>
 <body>
@@ -813,6 +826,7 @@ async function loadZoomPlayer(sk) {
     zoomLoader.style.display = 'none';
     const data = p.skeleton.data, anims = data.animations.map(a => a.name);
     const def = sk.curAnim && anims.includes(sk.curAnim) ? sk.curAnim : (anims[0] || '');
+    let curAnimName = def;
     if (def) { try { p.setAnimation(def, loopAnimations); p.play(); } catch (e) {} }
 
     const animsEl = document.createElement('div');
@@ -820,11 +834,20 @@ async function loadZoomPlayer(sk) {
     if (anims.length > 1) {
       const sel = document.createElement('select');
       anims.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; if (a === def) o.selected = true; sel.appendChild(o); });
-      sel.onchange = () => { try { p.setAnimation(sel.value, loopAnimations); p.play(); } catch (e) {} };
+      sel.onchange = () => { curAnimName = sel.value; try { p.setAnimation(sel.value, loopAnimations); p.play(); } catch (e) {} };
       animsEl.innerHTML = '<span class="lbl">Animation</span>';
       animsEl.appendChild(sel);
     } else if (anims.length === 1) {
       animsEl.innerHTML = `<span class="lbl">Animation</span><span class="tag">${anims[0]}</span>`;
+    }
+    if (def) {
+      const replayBtn = document.createElement('button');
+      replayBtn.className = 'replay-btn'; replayBtn.type = 'button';
+      replayBtn.title = 'Replay animation'; replayBtn.innerHTML = '&#8635;';
+      // Only surfaced while loop is off (see body.loop-off CSS rule) — a
+      // looping animation is already replaying itself.
+      replayBtn.onclick = () => { try { p.setAnimation(curAnimName, false); p.play(); } catch (e) {} };
+      animsEl.appendChild(replayBtn);
     }
 
     const ver = data.skeleton?.version || '?', w = Math.round(data.skeleton?.width || 0), h = Math.round(data.skeleton?.height || 0);
@@ -844,6 +867,12 @@ async function loadZoomPlayer(sk) {
     zoomInfoInner.appendChild(chips);
 
     zoomInfoInner.appendChild(buildEventLog(p, data));
+
+    const debugSection = document.createElement('div');
+    debugSection.className = 'zoom-debug';
+    debugSection.innerHTML = `<span class="lbl">Debug</span><div class="zoom-debug-toggles">${debugTogglesTemplate}</div>`;
+    wireDebugCheckboxes(debugSection);
+    zoomInfoInner.appendChild(debugSection);
   } catch (e) {
     zoomLoader.style.display = 'none';
     zoomPlayerHost.innerHTML = `<div class="zoom-error">Failed to load<br><span style="color:var(--text-faint);font-size:.78rem">${e.message}</span></div>`;
@@ -974,6 +1003,14 @@ async function renderSkeletons(skeletons) {
         } else if (anims.length === 1) {
           const tag = document.createElement('span'); tag.className = 'anim-tag'; tag.textContent = anims[0];
           footer.appendChild(tag);
+        }
+        if (def) {
+          const replayBtn = document.createElement('button');
+          replayBtn.className = 'replay-btn'; replayBtn.type = 'button';
+          replayBtn.title = 'Replay animation'; replayBtn.innerHTML = '&#8635;';
+          replayBtn.onclick = e => { e.stopPropagation(); try { p.setAnimation(sk.curAnim || def, false); p.play(); } catch (err) {} };
+          replayBtn.onmousedown = e => e.stopPropagation();
+          footer.appendChild(replayBtn);
         }
 
         meta.innerHTML = `<span><b>${data.bones.length}</b> bones</span><span><b>${data.slots.length}</b> slots</span>`;
@@ -1171,14 +1208,26 @@ sizeSeg.addEventListener('click', e => {
 setSize(localStorage.getItem('spine-viewer-size') || 'm');
 
 // ---- debug panel ----
-for (const cb of debugPanel.querySelectorAll('input[data-debug]')) {
-  const key = cb.dataset.debug;
-  cb.checked = !!debugSettings[key];
-  cb.onchange = () => {
-    debugSettings[key] = cb.checked;
-    localStorage.setItem('spine-viewer-debug', JSON.stringify(debugSettings));
-  };
+// The same 7 toggles also get rendered inside the zoom (maximized) view, since
+// the toolbar's copy sits behind the zoom backdrop and can't be reached while
+// zoomed in. Both copies write into the single shared `debugSettings` object,
+// and toggling one keeps every other rendered copy of that same toggle (in
+// the toolbar panel, or in an open zoom view) in sync immediately.
+const debugTogglesTemplate = debugPanel.innerHTML;
+function wireDebugCheckboxes(container) {
+  for (const cb of container.querySelectorAll('input[data-debug]')) {
+    const key = cb.dataset.debug;
+    cb.checked = !!debugSettings[key];
+    cb.onchange = () => {
+      debugSettings[key] = cb.checked;
+      localStorage.setItem('spine-viewer-debug', JSON.stringify(debugSettings));
+      for (const other of document.querySelectorAll(`input[data-debug="${key}"]`)) {
+        if (other !== cb) other.checked = cb.checked;
+      }
+    };
+  }
 }
+wireDebugCheckboxes(debugPanel);
 function positionDebugPanel() {
   const r = debugBtn.getBoundingClientRect();
   debugPanel.style.top = `${r.bottom + 8}px`;
@@ -1200,10 +1249,16 @@ document.addEventListener('click', e => {
 window.addEventListener('resize', () => { if (debugPanel.classList.contains('show')) positionDebugPanel(); });
 
 // ---- loop toggle ----
+// Replay buttons (added next to every animation picker, card and zoom alike)
+// are only useful when loop is off — a looping animation never needs a manual
+// nudge — so they're shown/hidden purely via this body class rather than
+// tracking every button instance.
 loopToggle.checked = loopAnimations;
+document.body.classList.toggle('loop-off', !loopAnimations);
 loopToggle.onchange = () => {
   loopAnimations = loopToggle.checked;
   localStorage.setItem('spine-viewer-loop', String(loopAnimations));
+  document.body.classList.toggle('loop-off', !loopAnimations);
   applyLoopToAllPlayers();
 };
 
