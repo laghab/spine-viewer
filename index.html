@@ -252,6 +252,22 @@ main{max-width:1400px;margin:0 auto;padding:0 1.75rem}
 .event-log .ev .k.interrupt,.event-log .ev .k.end{color:var(--text-dim)}
 .event-log .ev .d{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .event-log .ev-empty{padding:.6rem;color:var(--text-faint);text-align:center}
+
+/* ---- debug menu / loop toggle (toolbar) ----
+   .debug-panel is positioned :fixed and its top/right are set from JS off the
+   button's bounding rect (see debugBtn.onclick), rather than being an
+   absolutely-positioned descendant of .debug-menu. The toolbar's own
+   clip-path (used for its sticky full-bleed background) clips any content
+   that overflows the toolbar's own box height, which would otherwise cut off
+   or make unclickable a dropdown anchored below it. */
+.debug-panel{display:none;position:fixed;z-index:50;flex-direction:column;
+  gap:.55rem;min-width:13rem;padding:.85rem 1rem;background:var(--bg-elevated);border:1px solid var(--border);
+  border-radius:var(--radius-md);box-shadow:var(--shadow-card)}
+.debug-panel.show{display:flex}
+.debug-panel .switch{color:var(--text)}
+.toolbar-toggle{display:inline-flex}
+.toolbar-toggle .switch{background:var(--bg-elevated);border:1px solid var(--border);border-radius:999px;
+  padding:.5rem 1rem .5rem .85rem}
 </style>
 </head>
 <body>
@@ -298,6 +314,12 @@ main{max-width:1400px;margin:0 auto;padding:0 1.75rem}
           <button data-size="m" aria-pressed="true">M</button>
           <button data-size="l" aria-pressed="false">L</button>
         </div>
+        <button class="btn" id="debug-btn" type="button" aria-expanded="false">
+          <span class="ico">&#128737;</span> Debug
+        </button>
+        <div class="toolbar-toggle">
+          <label class="switch" id="loop-toggle"><input type="checkbox" checked><span class="track"></span><span>Loop animations</span></label>
+        </div>
         <button class="btn" id="resync-btn" style="display:none">
           <span class="ico">&#8635;</span> Restart all
         </button>
@@ -308,6 +330,16 @@ main{max-width:1400px;margin:0 auto;padding:0 1.75rem}
 </main>
 
 <div id="status-bar"><span id="status-left">Ready</span></div>
+
+<div class="debug-panel" id="debug-panel">
+  <label class="switch"><input type="checkbox" data-debug="bones"><span class="track"></span><span>Draw bones</span></label>
+  <label class="switch"><input type="checkbox" data-debug="regions"><span class="track"></span><span>Draw region attachments</span></label>
+  <label class="switch"><input type="checkbox" data-debug="clipping"><span class="track"></span><span>Draw clipping</span></label>
+  <label class="switch"><input type="checkbox" data-debug="hulls"><span class="track"></span><span>Draw mesh hull</span></label>
+  <label class="switch"><input type="checkbox" data-debug="meshes"><span class="track"></span><span>Draw mesh triangles</span></label>
+  <label class="switch"><input type="checkbox" data-debug="paths"><span class="track"></span><span>Draw paths</span></label>
+  <label class="switch"><input type="checkbox" data-debug="bounds"><span class="track"></span><span>Draw bounding boxes</span></label>
+</div>
 
 <div class="zoom-backdrop" id="zoom-backdrop"></div>
 <div class="zoom-panel" id="zoom-panel" style="display:none">
@@ -337,6 +369,8 @@ const $ = id => document.getElementById(id);
 const dropzone = $('dropzone'), fileInput = $('file-input'), browseBtn = $('browse-btn');
 const content = $('content'), hero = $('hero'), cardContainer = $('card-container'), skelCount = $('skel-count');
 const clearBtn = $('clear-btn'), statusLeft = $('status-left'), resyncBtn = $('resync-btn');
+const debugBtn = $('debug-btn'), debugPanel = $('debug-panel');
+const loopToggle = $('loop-toggle').querySelector('input');
 const backdrop = $('zoom-backdrop'), panel = $('zoom-panel'), closeBtn = $('zoom-close');
 const zoomBody = $('zoom-body'), zoomPlayerHost = $('zoom-player-host'), zoomLoader = $('zoom-loader');
 const zoomInfo = $('zoom-info'), zoomInfoInner = $('zoom-info-inner');
@@ -377,6 +411,27 @@ let zoomOpen = false;
 // assets finish loading — leaving the grid permanently out of phase. Restarting
 // them all from time 0 in a single frame is what re-syncs them.
 let cardPlayers = [];
+
+// ---- debug skeleton-part rendering (bones, meshes, clipping, ...) ----
+// This single object is passed by reference as `debug` to every SpinePlayer's
+// config, card and zoom alike, and spine-player re-reads its fields every
+// frame — so flipping a field here takes effect on every live player
+// immediately, with no need to rebuild or restart anything.
+const debugSettings = { bones: false, regions: false, clipping: false, hulls: false, meshes: false, paths: false, bounds: false };
+try { Object.assign(debugSettings, JSON.parse(localStorage.getItem('spine-viewer-debug') || '{}')); } catch (e) {}
+
+// ---- loop animations on/off ----
+// Applied as the `loop` argument whenever an animation is (re)started, and
+// pushed onto the currently-playing track of every live player on toggle so
+// the change is felt immediately without restarting playback.
+let loopAnimations = localStorage.getItem('spine-viewer-loop') !== 'false';
+
+function applyLoopToAllPlayers() {
+  const all = zoomPlayer ? cardPlayers.concat(zoomPlayer) : cardPlayers;
+  for (const p of all) {
+    try { const entry = p.animationState?.getCurrent(0); if (entry) entry.loop = loopAnimations; } catch (e) {}
+  }
+}
 
 // The players render onto transparent canvases (alpha:true + a fully transparent
 // clear color) so the card's own themed gradient shows through instead of an
@@ -751,20 +806,21 @@ async function loadZoomPlayer(sk) {
       skeleton: sk.skeletonUrl, atlas: sk.atlasUrl, rawDataURIs: sk.rawDataURIs,
       animation: sk.curAnim || '', backgroundColor: '00000000', showControls: false, showLoading: false, alpha: true,
       viewport: { padLeft: '6%', padRight: '6%', padTop: '6%', padBottom: '6%' },
+      debug: debugSettings,
     });
     zoomPlayer = p;
     await waitForSkeleton(p);
     zoomLoader.style.display = 'none';
     const data = p.skeleton.data, anims = data.animations.map(a => a.name);
     const def = sk.curAnim && anims.includes(sk.curAnim) ? sk.curAnim : (anims[0] || '');
-    if (def) { try { p.setAnimation(def); p.play(); } catch (e) {} }
+    if (def) { try { p.setAnimation(def, loopAnimations); p.play(); } catch (e) {} }
 
     const animsEl = document.createElement('div');
     animsEl.className = 'zoom-anims';
     if (anims.length > 1) {
       const sel = document.createElement('select');
       anims.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; if (a === def) o.selected = true; sel.appendChild(o); });
-      sel.onchange = () => { try { p.setAnimation(sel.value); p.play(); } catch (e) {} };
+      sel.onchange = () => { try { p.setAnimation(sel.value, loopAnimations); p.play(); } catch (e) {} };
       animsEl.innerHTML = '<span class="lbl">Animation</span>';
       animsEl.appendChild(sel);
     } else if (anims.length === 1) {
@@ -894,19 +950,26 @@ async function renderSkeletons(skeletons) {
           skeleton: sk.skeletonUrl, atlas: sk.atlasUrl, rawDataURIs: sk.rawDataURIs,
           animation: '', backgroundColor: '00000000', showControls: false, showLoading: false, alpha: true,
           viewport: { padLeft: '14%', padRight: '14%', padTop: '14%', padBottom: '14%' },
+          debug: debugSettings,
         });
         await waitForSkeleton(p);
         loader.remove();
         cardPlayers.push(p);
 
         const data = p.skeleton.data, anims = data.animations.map(a => a.name), def = anims[0] || '';
-        if (def) { sk.curAnim = def; try { p.setAnimation(def); p.play(); } catch (e) {} }
+        if (def) { sk.curAnim = def; try { p.setAnimation(def, loopAnimations); p.play(); } catch (e) {} }
 
         if (anims.length > 1) {
           const sel = document.createElement('select'); sel.className = 'anim-select';
           anims.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; if (a === def) o.selected = true; sel.appendChild(o); });
-          sel.onchange = () => { sk.curAnim = sel.value; try { p.setAnimation(sel.value); p.play(); } catch (e) {} };
+          sel.onchange = () => { sk.curAnim = sel.value; try { p.setAnimation(sel.value, loopAnimations); p.play(); } catch (e) {} };
+          // The card itself opens the zoom view on click; selecting from this
+          // dropdown fires both `mousedown` and `click` on the <select>, and both
+          // bubble to the card unless stopped — leaving just mousedown stopped
+          // meant every animation switch also triggered openZoom (maximized the
+          // card). Stop both.
           sel.onmousedown = e => e.stopPropagation();
+          sel.onclick = e => e.stopPropagation();
           footer.appendChild(sel);
         } else if (anims.length === 1) {
           const tag = document.createElement('span'); tag.className = 'anim-tag'; tag.textContent = anims[0];
@@ -1106,6 +1169,43 @@ sizeSeg.addEventListener('click', e => {
   if (b) setSize(b.dataset.size);
 });
 setSize(localStorage.getItem('spine-viewer-size') || 'm');
+
+// ---- debug panel ----
+for (const cb of debugPanel.querySelectorAll('input[data-debug]')) {
+  const key = cb.dataset.debug;
+  cb.checked = !!debugSettings[key];
+  cb.onchange = () => {
+    debugSettings[key] = cb.checked;
+    localStorage.setItem('spine-viewer-debug', JSON.stringify(debugSettings));
+  };
+}
+function positionDebugPanel() {
+  const r = debugBtn.getBoundingClientRect();
+  debugPanel.style.top = `${r.bottom + 8}px`;
+  debugPanel.style.right = `${window.innerWidth - r.right}px`;
+}
+debugBtn.onclick = e => {
+  e.stopPropagation();
+  const open = !debugPanel.classList.contains('show');
+  if (open) positionDebugPanel();
+  debugPanel.classList.toggle('show', open);
+  debugBtn.setAttribute('aria-expanded', String(open));
+};
+document.addEventListener('click', e => {
+  if (debugPanel.classList.contains('show') && !debugPanel.contains(e.target) && e.target !== debugBtn) {
+    debugPanel.classList.remove('show');
+    debugBtn.setAttribute('aria-expanded', 'false');
+  }
+});
+window.addEventListener('resize', () => { if (debugPanel.classList.contains('show')) positionDebugPanel(); });
+
+// ---- loop toggle ----
+loopToggle.checked = loopAnimations;
+loopToggle.onchange = () => {
+  loopAnimations = loopToggle.checked;
+  localStorage.setItem('spine-viewer-loop', String(loopAnimations));
+  applyLoopToAllPlayers();
+};
 
 // Debug handle: lets the current playback position of every card be inspected
 // from the console (or an automated check) to confirm they are actually in phase.
