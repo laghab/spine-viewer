@@ -5,58 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Spine Viewer</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%B4%3C/text%3E%3C/svg%3E">
+<!-- Shared Praxis theme kit (styles, palettes, picker, cross-tool sync).
+     Canonical copy: ~/work/projects/theme-kit — run its sync.sh after edits. -->
+<link rel="stylesheet" href="/theme-kit.css">
+<script src="/theme-kit.js"></script>
 <style>
+/* Theme: the shared Praxis theme kit (theme-kit.{css,js}, canonical copy in
+   ~/work/projects/theme-kit — edit there and run its sync.sh) owns the palette,
+   light/dark, the style families and the picker. This maps the viewer's own
+   token names onto the kit's. */
 :root{
-  --bg:#090b10; --bg-elevated:#12151c; --bg-sunken:#05070a; --bg-well:#0d1016;
-  --border:#1e232d; --border-hover:#333d4d;
-  --accent:#5eead4; --accent-soft:#5eead422; --accent2:#a78bfa;
-  --accent-ink:#04231e; --accent-grad:#38c9b9;
-  --text:#e5e9f0; --text-dim:#8891a0; --text-faint:#4a5261;
-  --ok:#5eead4; --err:#fb7185; --err-bg:#241014; --err-border:#4a2530;
-  --glow1:#17203622; --glow2:#2a173622;
-  --stage1:#171c26; --stage2:#0d1016;
-  --shadow-card:0 14px 32px -14px rgba(0,0,0,.55);
-  --shadow-panel:0 30px 80px -20px rgba(0,0,0,.6);
-  --scrim:rgba(3,4,6,.78); --bar-bg:rgba(9,11,16,.72); --status-bg:rgba(5,7,10,.85);
-  --radius-lg:20px; --radius-md:14px; --radius-sm:8px;
-}
-:root[data-theme="light"]{
-  --bg:#f4f6fa; --bg-elevated:#ffffff; --bg-sunken:#eef1f6; --bg-well:#e9edf4;
-  --border:#dde3ec; --border-hover:#b9c3d3;
-  --accent:#0d9488; --accent-soft:#0d948818; --accent2:#7c5cf0;
-  --accent-ink:#ffffff; --accent-grad:#0f766e;
-  --text:#111726; --text-dim:#5a6478; --text-faint:#8b95a8;
-  --ok:#0d9488; --err:#d4344b; --err-bg:#fdf0f2; --err-border:#f2c2c9;
-  --glow1:#0d948814; --glow2:#7c5cf014;
-  --stage1:#ffffff; --stage2:#e7ecf4;
+  --bg-elevated:var(--bg-elev); --bg-sunken:color-mix(in oklab,var(--bg),var(--fg) 4%); --bg-well:var(--bg-elev-2);
+  --border:var(--line); --border-hover:color-mix(in oklab,var(--bg),var(--fg) 26%);
+  --accent-soft:color-mix(in srgb,var(--accent) 13%,transparent); --accent2:var(--accent-2);
+  --accent-ink:var(--accent-fg); --accent-grad:color-mix(in oklab,var(--accent),#000 18%);
+  --text:var(--fg); --text-dim:var(--fg-dim); --text-faint:var(--fg-dimmer);
+  --ok:var(--accent); --err:#d4344b; --err-bg:#fdf0f2; --err-border:#f2c2c9;
+  --glow1:color-mix(in srgb,var(--accent) 8%,transparent); --glow2:color-mix(in srgb,var(--accent-2) 8%,transparent);
+  --stage1:var(--bg-elev); --stage2:color-mix(in oklab,var(--bg),var(--fg) 7%);
   --shadow-card:0 12px 28px -14px rgba(24,39,75,.18);
   --shadow-panel:0 30px 80px -22px rgba(24,39,75,.28);
-  --scrim:rgba(28,36,54,.42); --bar-bg:rgba(244,246,250,.78); --status-bg:rgba(238,241,246,.9);
+  --scrim:rgba(28,36,54,.42); --bar-bg:color-mix(in srgb,var(--bg) 78%,transparent); --status-bg:color-mix(in srgb,var(--bg-elev-2) 90%,transparent);
+  --radius-lg:calc(var(--radius) + 4px); --radius-md:var(--radius);
+}
+:root[data-mode="dark"]{
+  --err:#fb7185; --err-bg:#241014; --err-border:#4a2530;
+  --stage1:color-mix(in oklab,var(--bg-elev),#fff 4%); --stage2:color-mix(in oklab,var(--bg),#000 25%);
+  --shadow-card:0 14px 32px -14px rgba(0,0,0,.55);
+  --shadow-panel:0 30px 80px -20px rgba(0,0,0,.6);
+  --scrim:rgba(3,4,6,.78);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html{color-scheme:dark}
-html[data-theme="light"]{color-scheme:light}
 body{background:
     radial-gradient(1200px 600px at 15% -10%, var(--glow1), transparent),
     radial-gradient(1000px 500px at 110% 10%, var(--glow2), transparent),
     var(--bg);
-  color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  color:var(--text);font-family:var(--font-body);
   min-height:100vh;line-height:1.5;padding-bottom:3rem;
   transition:background-color .25s ease,color .25s ease}
 button{font-family:inherit}
 button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 ::selection{background:var(--accent-soft);color:var(--text)}
 
-/* ---- theme toggle ---- */
-.theme-toggle{display:flex;align-items:center;justify-content:center;width:2.25rem;height:2.25rem;
-  background:var(--bg-elevated);border:1px solid var(--border);border-radius:50%;cursor:pointer;
-  color:var(--text-faint);font-size:1rem;line-height:1;
-  transition:background-color .18s,color .18s,border-color .18s}
-.theme-toggle:hover{color:var(--accent);border-color:var(--accent)}
-
 /* ---- top bar ---- */
 .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;
-  padding:1rem 1.75rem;background:var(--bar-bg);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+  padding:1rem 1.75rem}
 .brand{display:flex;align-items:center;gap:.65rem}
 .brand .mark{width:1.9rem;height:1.9rem;border-radius:8px;display:flex;align-items:center;justify-content:center;
   background:linear-gradient(135deg,var(--accent),var(--accent2));font-size:1rem;flex-shrink:0}
@@ -64,12 +57,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .brand .sub{color:var(--text-faint);font-size:.75rem;margin-top:.05rem}
 .topbar .actions{display:flex;align-items:center;gap:.6rem}
 
-.btn{display:inline-flex;align-items:center;gap:.4rem;background:var(--bg-elevated);color:var(--text);
-  border:1px solid var(--border);border-radius:999px;padding:.5rem 1.05rem;font-size:.83rem;font-weight:500;
-  cursor:pointer;transition:border-color .15s,color .15s,transform .1s,background-color .15s}
-.btn:hover{border-color:var(--accent);color:var(--accent)}
-.btn:active{transform:scale(.97)}
-.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-grad));color:var(--accent-ink);border-color:transparent;font-weight:600}
+.btn{display:inline-flex;align-items:center;gap:.4rem;background:var(--btn-bg);color:var(--btn-fg);
+  border:1px solid var(--btn-border);border-radius:var(--btn-radius);box-shadow:var(--btn-shadow);clip-path:var(--btn-clip);
+  padding:.5rem 1.05rem;font-size:.83rem;font-weight:500;
+  cursor:pointer;transition:border-color .18s,color .18s,background .18s,box-shadow .18s,transform .3s var(--spring)}
+.btn:hover{border-color:var(--btn-hover-border);color:var(--btn-hover-fg);background:var(--btn-hover-bg);box-shadow:var(--btn-hover-shadow)}
+.btn:active{transform:var(--btn-active-transform)}
+.btn.primary{background:var(--btn-primary-bg);color:var(--btn-primary-fg);border-color:transparent;font-weight:600}
 .btn.primary:hover{color:var(--accent-ink);filter:brightness(1.08)}
 .btn.ghost{background:transparent}
 
@@ -146,9 +140,8 @@ main{max-width:1400px;margin:0 auto;padding:0 1.75rem}
 .empty-state .hint{color:var(--text-faint);font-size:.8rem}
 
 /* ---- cards ---- */
-.card{position:relative;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-md);
-  overflow:hidden;cursor:pointer;transition:border-color .2s,transform .18s,box-shadow .18s}
-.card:hover{border-color:var(--border-hover);transform:translateY(-3px);box-shadow:var(--shadow-card)}
+/* surface, hover lift and press come from the kit's .tk-tile */
+.card{position:relative;overflow:hidden;cursor:pointer}
 .card:hover .card-footer .name{color:var(--accent)}
 .card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
   box-shadow:inset 0 0 0 1px var(--accent);opacity:0;transition:opacity .2s}
@@ -281,12 +274,32 @@ body.loop-off .replay-btn{display:inline-flex}
 .zoom-debug .lbl{color:var(--text-faint);font-size:.78rem;margin-bottom:.6rem;display:block}
 .zoom-debug-toggles{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .75rem}
 .zoom-debug-toggles .switch{font-size:.75rem}
+/* ---- phones ---- */
+@media (max-width:560px){
+  .topbar{padding:.75rem 1rem}
+  .brand .sub{display:none}
+  main{padding:0 1rem}
+}
+
+/* ---- style-specific details ---- */
+html:root[data-family="xp"] main{padding-top:calc(30px + 1.5rem);max-width:1360px}
+html:root[data-family="xp"] .brand .sub{color:inherit;opacity:.85}
+html:root[data-family="xp"] .card .card-footer{background:var(--bg-elev)}
+html:root[data-family="cyber"] .brand h1,html:root[data-family="cyber"] .toolbar h2{font-family:var(--font-display);text-transform:uppercase;letter-spacing:.08em}
+html:root[data-family="cyber"] .dir-header{color:var(--accent);font-family:var(--font-display)}
+html:root[data-family="cyber"] .seg,html:root[data-family="cyber"] .seg button,html:root[data-family="cyber"] .drop-zone,html:root[data-family="cyber"] .brand .mark{border-radius:0}
+html:root[data-family="arcade"] .brand h1,html:root[data-family="arcade"] .toolbar h2{font-family:var(--font-display);font-weight:400}
+html:root[data-family="arcade"] .dir-header{color:var(--accent);font-family:var(--font-display);font-weight:400}
+html:root[data-family="factorio"] main{padding-top:calc(34px + 1.5rem);max-width:1360px}
+html:root[data-family="factorio"] .seg,html:root[data-family="factorio"] .search input,html:root[data-family="factorio"] .drop-zone{border-radius:0;border-color:#000;background:var(--bg-elev-2);box-shadow:var(--fo-well)}
+html:root[data-family="factorio"] .brand h1,html:root[data-family="factorio"] .toolbar h2,html:root[data-family="factorio"] .dir-header{color:var(--fo-heading);font-weight:700;letter-spacing:0;text-transform:none}
+html:root[data-family="factorio"] .card .card-body{box-shadow:var(--fo-well)}
 </style>
 </head>
-<body>
+<body class="tk-body">
 
-<div class="topbar">
-  <div class="brand">
+<div class="topbar tk-header">
+  <div class="brand tk-brand">
     <div class="mark">&#129497;</div>
     <div>
       <h1>Spine Viewer</h1>
@@ -294,12 +307,12 @@ body.loop-off .replay-btn{display:inline-flex}
     </div>
   </div>
   <div class="actions">
-    <button class="theme-toggle" id="theme-toggle" type="button"></button>
+    <div id="theme-controls"></div>
     <button class="btn ghost" id="clear-btn" style="display:none">Clear</button>
   </div>
 </div>
 
-<main>
+<main class="tk-window tk-page-enter" data-title="Spine Viewer">
   <div class="hero" id="hero">
     <div class="drop-zone" id="dropzone">
       <div class="icon">&#10024;</div>
@@ -391,29 +404,11 @@ const zoomInfo = $('zoom-info'), zoomInfoInner = $('zoom-info-inner');
 const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---- theme ----
-// Two modes: light and dark. First visit follows the OS, after that the stored
-// choice wins. SpinePlayer bakes its clear color into WebGL at construction
-// time, so the canvases can't be re-tinted by CSS — the current stage color is
-// read back out of the stylesheet whenever a player is built, and switching
-// theme rebuilds them.
-const themeMq = window.matchMedia('(prefers-color-scheme: dark)');
-let theme = localStorage.getItem('spine-viewer-theme') || (themeMq.matches ? 'dark' : 'light');
-const themeBtn = document.getElementById('theme-toggle');
-
-function applyTheme() {
-  document.documentElement.setAttribute('data-theme', theme);
-  const dark = theme === 'dark';
-  themeBtn.innerHTML = dark ? '&#9790;' : '&#9728;';
-  themeBtn.title = dark ? 'Dark mode — click for light' : 'Light mode — click for dark';
-  themeBtn.setAttribute('aria-label', themeBtn.title);
-}
-applyTheme();
-themeBtn.addEventListener('click', () => {
-  theme = theme === 'dark' ? 'light' : 'dark';
-  localStorage.setItem('spine-viewer-theme', theme);
-  applyTheme();
-  restyleAllPlayers();
-});
+// The shared Praxis theme kit owns light/dark, styles and palettes. The
+// players render onto transparent canvases, so a theme change only needs
+// restyleAllPlayers() to clear the background SpinePlayer stamps on.
+ThemeKit.mount(document.getElementById('theme-controls'));
+document.documentElement.addEventListener('tk:change', () => restyleAllPlayers());
 
 let zoomPlayer = null;
 let sourceCard = null;
@@ -950,9 +945,10 @@ async function renderSkeletons(skeletons) {
     const grid = document.createElement('div'); grid.className = 'card-grid';
     grp.appendChild(grid); cardContainer.appendChild(grp);
 
-    for (const sk of skels) {
+    for (const [i, sk] of skels.entries()) {
       sk.curAnim = '';
-      const card = document.createElement('div'); card.className = 'card';
+      const card = document.createElement('div'); card.className = 'card tk-tile tk-rise';
+      card.style.setProperty('--i', Math.min(i, 24));
       card.dataset.name = sk.name;
 
       const body = document.createElement('div'); body.className = 'card-body';
